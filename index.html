@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatGPT Chat Bot</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1 class="text-3xl font-bold mb-4">ChatGPT Chat Bot</h1>
+    <div id="messages" class="mb-4 max-h-64 overflow-y-auto"></div>
+    <input id="topic-input" type="text" placeholder="メッセージを入力" class="input">
+    <button id="send-btn" class="bg-blue-500 text-white px-4 py-2 rounded mt-4">
+      <i class="mdi mdi-send"></i> 送信
+    </button>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var firebaseConfig = {
+        // "apiKey"
+      };
+      firebase.initializeApp(firebaseConfig);
+      var database = firebase.database();
+      const topicInput = document.getElementById('topic-input');
+      const sendBtn = document.getElementById('send-btn');
+      const messagesDiv = document.getElementById('messages');
+
+      async function callOpenAIAPI(message) {
+        // const apiKey = "YOUR_OPENAI";
+        try {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: "gpt-3.5-turbo",
+              messages: [{ role: "user", content: message }],
+              max_tokens: 150
+            })
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          if (data.choices && data.choices.length > 0) {
+            return data.choices[0].message.content.trim();
+          } else {
+            throw new Error('No response from OpenAI API');
+          }
+        } catch (error) {
+          console.error('Error calling OpenAI API:', error);
+          return 'Sorry, I am having trouble understanding your message.';
+        }
+      }
+
+      async function sendMessage() {
+        const message = topicInput.value;
+        if (message) {
+          database.ref('messages').push({
+            message: message,
+            timestamp: Date.now(),
+            user: true
+          });
+          topicInput.value = '';
+
+          const botResponse = await callOpenAIAPI(message);
+          database.ref('messages').push({
+            message: botResponse,
+            timestamp: Date.now(),
+            user: false,
+            bot: true
+          });
+        }
+      }
+
+      sendBtn.addEventListener('click', sendMessage);
+      topicInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+          sendMessage();
+        }
+      });
+
+      database.ref('messages').on('child_added', function(snapshot) {
+        const messageData = snapshot.val();
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message');
+        if (messageData.user) {
+          messageElement.classList.add('user');
+        } else if (messageData.bot) {
+          messageElement.classList.add('bot');
+        }
+        messageElement.textContent = messageData.message;
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      });
+    });
+  </script>
+</body>
+</html>
